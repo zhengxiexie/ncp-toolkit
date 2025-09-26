@@ -501,19 +501,11 @@ main() {
     
     # Step 4.5: Wait for user to run NSX Operator and signal when ready
     log_info "Setup completed. Please ensure NSX Operator is running enough time and generating coverage data."
-    log_info "When you are ready to generate the coverage report, press Ctrl+C to continue..."
+    log_info "When you are ready to generate the coverage report, press Ctrl+D to continue..."
     
-    # Set up signal handler for SIGINT (Ctrl+C) with flag variable
-    local continue_flag=false
-    trap 'log_info "Received signal to continue with coverage generation..."; continue_flag=true' SIGINT
-    
-    # Wait for user signal
-    while [ "$continue_flag" = false ]; do
-        sleep 1
-    done
-    
-    # Remove trap after signal is received
-    trap - SIGINT
+    # Wait for user input (Ctrl+D sends EOF)
+    log_info "Waiting for Ctrl+D signal..."
+    read -r || true
     
     log_info "Continuing with coverage dump..."
     
