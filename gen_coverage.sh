@@ -550,6 +550,7 @@ process_coverage_data() {
     cd "/root/$SRC_DIR"
     
     # Create merged directory
+    rm -fr "$MERGED_DIR"
     mkdir -p "$MERGED_DIR"
     
     # Merge coverage data
