@@ -396,16 +396,53 @@ wait_for_pods_ready() {
 cleanup_coverage_dir() {
     log_info "Cleaning up legacy coverage data from $COVERAGE_DIR..."
     
-    if [ -d "$COVERAGE_DIR" ]; then
-        rm -rf "$COVERAGE_DIR"
-        log_info "Removed existing coverage directory: $COVERAGE_DIR"
-    else
-        log_info "Coverage directory does not exist, no cleanup needed"
+    if [ ! -d "$COVERAGE_DIR" ]; then
+        log_info "Coverage directory does not exist, creating fresh directory"
+        mkdir -p "$COVERAGE_DIR"
+        return 0
     fi
     
-    # Create fresh coverage directory
-    mkdir -p "$COVERAGE_DIR"
-    log_info "Created fresh coverage directory: $COVERAGE_DIR"
+    # Find all covmeta files
+    local covmeta_files
+    covmeta_files=$(find "$COVERAGE_DIR" -maxdepth 1 -name "covmeta.*" -type f 2>/dev/null | sort)
+    
+    if [ -z "$covmeta_files" ]; then
+        log_info "No covmeta files found, no cleanup needed"
+        return 0
+    fi
+    
+    # Count covmeta files
+    local covmeta_count
+    covmeta_count=$(echo "$covmeta_files" | wc -l)
+    log_info "Found $covmeta_count covmeta files"
+    
+    if [ "$covmeta_count" -le 1 ]; then
+        log_info "Only one or no covmeta files found, no cleanup needed"
+        return 0
+    fi
+    
+    # Find the latest covmeta file based on modification time
+    local latest_covmeta
+    latest_covmeta=$(find "$COVERAGE_DIR" -maxdepth 1 -name "covmeta.*" -type f -exec ls -t {} + 2>/dev/null | head -1)
+    
+    if [ -z "$latest_covmeta" ]; then
+        log_warn "Could not determine latest covmeta file"
+        return 0
+    fi
+    
+    log_info "Latest covmeta file: $(basename "$latest_covmeta")"
+    
+    # Delete all covmeta files except the latest one
+    local deleted_count=0
+    while IFS= read -r file; do
+        if [ "$file" != "$latest_covmeta" ]; then
+            log_info "Deleting old covmeta file: $(basename "$file")"
+            rm -f "$file"
+            deleted_count=$((deleted_count + 1))
+        fi
+    done <<< "$covmeta_files"
+    
+    log_info "Cleanup completed: kept 1 covmeta file, deleted $deleted_count old covmeta files"
 }
 
 # Process coverage data
