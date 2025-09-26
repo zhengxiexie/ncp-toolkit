@@ -503,13 +503,17 @@ main() {
     log_info "Setup completed. Please ensure NSX Operator is running enough time and generating coverage data."
     log_info "When you are ready to generate the coverage report, press Ctrl+C to continue..."
     
-    # Set up signal handler for SIGINT (Ctrl+C)
-    trap 'log_info "Received signal to continue with coverage generation..."; trap - SIGINT' SIGINT
+    # Set up signal handler for SIGINT (Ctrl+C) with flag variable
+    local continue_flag=false
+    trap 'log_info "Received signal to continue with coverage generation..."; continue_flag=true' SIGINT
     
     # Wait for user signal
-    while true; do
+    while [ "$continue_flag" = false ]; do
         sleep 1
-    done 2>/dev/null || true
+    done
+    
+    # Remove trap after signal is received
+    trap - SIGINT
     
     log_info "Continuing with coverage dump..."
     
