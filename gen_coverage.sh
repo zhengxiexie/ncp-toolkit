@@ -213,7 +213,11 @@ install_go() {
         local go_archive="go${GO_VERSION}.linux-amd64.tar.gz"
         local download_url="https://go.dev/dl/$go_archive"
         
-        cd /root
+        # Ensure we can access /root directory
+        if ! cd /root 2>/dev/null; then
+            log_error "Cannot access /root directory"
+            return 1
+        fi
         wget "$download_url"
         tar -C /usr/local -xzf "$go_archive"
         
@@ -235,7 +239,11 @@ install_go() {
 clone_repository() {
     log_info "Cloning nsx-operator repository..."
     
-    cd /root
+    # Ensure we can access /root directory
+    if ! cd /root 2>/dev/null; then
+        log_error "Cannot access /root directory"
+        return 1
+    fi
     if [ ! -d "$SRC_DIR" ]; then
         git clone --depth 1 "$REPO_URL"
         log_info "Repository cloned successfully"
