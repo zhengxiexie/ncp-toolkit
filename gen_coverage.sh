@@ -455,7 +455,7 @@ main() {
     log_info "Starting NSX Operator coverage generation..."
     
     # Step 0: Clean up legacy coverage data
-#     cleanup_coverage_dir
+    cleanup_coverage_dir
     
     # Step 1: Install system dependencies
     install_system_tools
