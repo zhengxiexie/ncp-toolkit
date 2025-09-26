@@ -391,9 +391,47 @@ wait_for_pods_to_stop() {
     return 0
 }
 
+# Get current node hostname
+get_current_node() {
+    local current_hostname
+    current_hostname=$(hostname)
+    if [ -z "$current_hostname" ]; then
+        log_error "Failed to get current hostname"
+        return 1
+    fi
+    echo "$current_hostname"
+}
+
 # Restart deployment to generate new coverage metadata
 restart_deployment() {
     log_info "Restarting deployment $DEPLOYMENT to ensure fresh coverage metadata generation..."
+    
+    # Get current node hostname
+    local current_node
+    current_node=$(get_current_node)
+    if [ $? -ne 0 ] || [ -z "$current_node" ]; then
+        log_error "Failed to get current node hostname"
+        return 1
+    fi
+    
+    log_info "Current node hostname: $current_node"
+    
+    # Force deployment to have replica=1 and schedule to current node
+    log_info "Configuring deployment to run on current node with 1 replica..."
+    
+    # Set replica count to 1
+    if ! kubectl scale deployment "$DEPLOYMENT" -n "$NAMESPACE" --replicas=1; then
+        log_error "Failed to scale deployment to 1 replica"
+        return 1
+    fi
+    
+    # Add nodeSelector to force scheduling to current node
+    if ! kubectl patch deployment "$DEPLOYMENT" -n "$NAMESPACE" -p "{\"spec\":{\"template\":{\"spec\":{\"nodeSelector\":{\"kubernetes.io/hostname\":\"$current_node\"}}}}}"; then
+        log_error "Failed to patch deployment with nodeSelector"
+        return 1
+    fi
+    
+    log_info "Deployment configured successfully (replica=1, nodeSelector=$current_node)"
     
     # Initiate deployment restart
     if ! kubectl rollout restart deployment "$DEPLOYMENT" -n "$NAMESPACE"; then
