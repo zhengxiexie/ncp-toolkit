@@ -359,6 +359,19 @@ check_any_pod_ready() {
     [ $ready_count -gt 0 ]
 }
 
+# Restart deployment to generate new coverage metadata
+restart_deployment() {
+    log_info "Restarting deployment $DEPLOYMENT to ensure fresh coverage metadata generation..."
+    
+    if ! kubectl rollout restart deployment "$DEPLOYMENT" -n "$NAMESPACE"; then
+        log_error "Failed to restart deployment $DEPLOYMENT"
+        return 1
+    fi
+    
+    log_info "Deployment restart initiated successfully"
+    return 0
+}
+
 # Wait for pods to restart and become ready
 wait_for_pods_ready() {
     log_info "Waiting for coverage files to be dumped..."
@@ -402,47 +415,21 @@ cleanup_coverage_dir() {
         return 0
     fi
     
-    # Find all covmeta files
-    local covmeta_files
-    covmeta_files=$(find "$COVERAGE_DIR" -maxdepth 1 -name "covmeta.*" -type f 2>/dev/null | sort)
+    # Check if directory has any contents
+    local file_count
+    file_count=$(find "$COVERAGE_DIR" -mindepth 1 | wc -l)
     
-    if [ -z "$covmeta_files" ]; then
-        log_info "No covmeta files found, no cleanup needed"
+    if [ "$file_count" -eq 0 ]; then
+        log_info "Coverage directory is already empty, no cleanup needed"
         return 0
     fi
     
-    # Count covmeta files
-    local covmeta_count
-    covmeta_count=$(echo "$covmeta_files" | wc -l)
-    log_info "Found $covmeta_count covmeta files"
+    log_info "Found $file_count items in coverage directory, deleting all contents"
     
-    if [ "$covmeta_count" -le 1 ]; then
-        log_info "Only one or no covmeta files found, no cleanup needed"
-        return 0
-    fi
+    # Delete all contents of the coverage directory
+    rm -rf "${COVERAGE_DIR:?}"/*
     
-    # Find the latest covmeta file based on modification time
-    local latest_covmeta
-    latest_covmeta=$(find "$COVERAGE_DIR" -maxdepth 1 -name "covmeta.*" -type f -exec ls -t {} + 2>/dev/null | head -1)
-    
-    if [ -z "$latest_covmeta" ]; then
-        log_warn "Could not determine latest covmeta file"
-        return 0
-    fi
-    
-    log_info "Latest covmeta file: $(basename "$latest_covmeta")"
-    
-    # Delete all covmeta files except the latest one
-    local deleted_count=0
-    while IFS= read -r file; do
-        if [ "$file" != "$latest_covmeta" ]; then
-            log_info "Deleting old covmeta file: $(basename "$file")"
-            rm -f "$file"
-            deleted_count=$((deleted_count + 1))
-        fi
-    done <<< "$covmeta_files"
-    
-    log_info "Cleanup completed: kept 1 covmeta file, deleted $deleted_count old covmeta files"
+    log_info "Cleanup completed: deleted all contents from $COVERAGE_DIR"
 }
 
 # Process coverage data
@@ -505,6 +492,26 @@ main() {
     
     # Step 4: Change to source directory
     cd "/root/$SRC_DIR"
+    
+    # Step 4.1: Restart deployment to generate fresh coverage metadata
+    if ! restart_deployment; then
+        log_error "Failed to restart deployment"
+        exit 1
+    fi
+    
+    # Step 4.5: Wait for user to run NSX Operator and signal when ready
+    log_info "Setup completed. Please ensure NSX Operator is running enough time and generating coverage data."
+    log_info "When you are ready to generate the coverage report, press Ctrl+C to continue..."
+    
+    # Set up signal handler for SIGINT (Ctrl+C)
+    trap 'log_info "Received signal to continue with coverage generation..."; trap - SIGINT' SIGINT
+    
+    # Wait for user signal
+    while true; do
+        sleep 1
+    done 2>/dev/null || true
+    
+    log_info "Continuing with coverage dump..."
     
     # Step 5: Trigger coverage dump
     if ! trigger_coverage_dump; then
