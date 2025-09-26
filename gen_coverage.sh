@@ -463,39 +463,6 @@ restart_deployment() {
     return 0
 }
 
-# Wait for pods to restart and become ready
-wait_for_pods_ready() {
-    log_info "Waiting for coverage files to be dumped..."
-    log_info "Monitoring deployment restart and waiting for pods to be running..."
-    
-    local elapsed=0
-    
-    while [ $elapsed -lt $TIMEOUT ]; do
-        if check_pod_status; then
-            log_info "All pods are running and ready. Coverage files should be available."
-            return 0
-        fi
-        
-        local current_pods
-        current_pods=$(get_pod_names)
-        if [ -z "$current_pods" ]; then
-            log_info "No pods found, waiting for deployment to create new pods..."
-        fi
-        
-        sleep $SLEEP_INTERVAL
-        elapsed=$((elapsed + SLEEP_INTERVAL))
-    done
-    
-    # Timeout reached - check if at least one pod is ready
-    if check_any_pod_ready; then
-        log_warn "Timeout reached waiting for all pods to be ready, but at least one pod is running. Continuing..."
-        return 0
-    else
-        log_error "Timeout reached and no pods are ready. Cannot proceed."
-        return 1
-    fi
-}
-
 # Clean up legacy coverage data
 cleanup_coverage_dir() {
     log_info "Cleaning up legacy coverage data from $COVERAGE_DIR..."
@@ -606,9 +573,6 @@ main() {
         log_error "Failed to trigger coverage dump"
         exit 1
     fi
-    
-    # Step 6: Wait for pods to be ready
-    wait_for_pods_ready
     
     # Step 7: Process coverage data
     if ! process_coverage_data; then
