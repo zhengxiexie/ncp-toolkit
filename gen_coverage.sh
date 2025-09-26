@@ -300,65 +300,6 @@ trigger_coverage_dump() {
     return 0
 }
 
-# Check pod readiness with detailed status
-check_pod_status() {
-    local current_pods
-    current_pods=$(get_pod_names)
-    
-    if [ -z "$current_pods" ]; then
-        return 1  # No pods found
-    fi
-    
-    local all_running=true
-    local ready_count=0
-    local total_count=0
-    
-    for pod in $current_pods; do
-        ((total_count++))
-        local pod_status pod_ready
-        pod_status=$(kubectl get pod -n "$NAMESPACE" "$pod" -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
-        pod_ready=$(kubectl get pod -n "$NAMESPACE" "$pod" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "False")
-        
-        if [ "$pod_status" = "Running" ] && [ "$pod_ready" = "True" ]; then
-            ((ready_count++))
-        else
-            all_running=false
-        fi
-    done
-    
-    log_info "Pod status: $ready_count/$total_count pods ready and running"
-    
-    # Return success if all pods are running, failure otherwise
-    [ "$all_running" = true ]
-}
-
-# Check if at least one pod is ready and running
-check_any_pod_ready() {
-    local current_pods
-    current_pods=$(get_pod_names)
-    
-    if [ -z "$current_pods" ]; then
-        return 1  # No pods found
-    fi
-    
-    local ready_count=0
-    local total_count=0
-    
-    for pod in $current_pods; do
-        ((total_count++))
-        local pod_status pod_ready
-        pod_status=$(kubectl get pod -n "$NAMESPACE" "$pod" -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
-        pod_ready=$(kubectl get pod -n "$NAMESPACE" "$pod" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "False")
-        
-        if [ "$pod_status" = "Running" ] && [ "$pod_ready" = "True" ]; then
-            ((ready_count++))
-        fi
-    done
-    
-    # Return success if at least one pod is ready
-    [ $ready_count -gt 0 ]
-}
-
 # Clean up covcounters files generated during pod shutdown
 cleanup_covcounters() {
     log_info "Cleaning up covcounters files from coverage directory..."
