@@ -359,16 +359,107 @@ check_any_pod_ready() {
     [ $ready_count -gt 0 ]
 }
 
+# Clean up covcounters files generated during pod shutdown
+cleanup_covcounters() {
+    log_info "Cleaning up covcounters files from coverage directory..."
+    
+    if [ ! -d "$COVERAGE_DIR" ]; then
+        log_info "Coverage directory does not exist, no covcounters cleanup needed"
+        return 0
+    fi
+    
+    # Find and count covcounters files
+    local covcounters_files
+    covcounters_files=$(find "$COVERAGE_DIR" -name "covcounters.*" -type f 2>/dev/null || true)
+    
+    if [ -z "$covcounters_files" ]; then
+        log_info "No covcounters files found, no cleanup needed"
+        return 0
+    fi
+    
+    local file_count
+    file_count=$(echo "$covcounters_files" | wc -l)
+    log_info "Found $file_count covcounters files, deleting them..."
+    
+    # Delete covcounters files
+    echo "$covcounters_files" | while IFS= read -r file; do
+        if [ -n "$file" ]; then
+            log_info "Deleting covcounters file: $(basename "$file")"
+            rm -f "$file"
+        fi
+    done
+    
+    log_info "Covcounters cleanup completed"
+}
+
+# Wait for pods to stop during restart
+wait_for_pods_to_stop() {
+    log_info "Waiting for pods to stop during restart..."
+    
+    local elapsed=0
+    local initial_pods
+    initial_pods=$(get_pod_names)
+    
+    # Wait until no pods are running or new pods are created
+    while [ $elapsed -lt $TIMEOUT ]; do
+        local current_pods
+        current_pods=$(get_pod_names)
+        
+        # Check if pods have changed (old pods terminated, new pods starting)
+        if [ "$current_pods" != "$initial_pods" ]; then
+            log_info "Pod changes detected, restart is in progress"
+            break
+        fi
+        
+        # Check if all pods are terminating/terminated
+        local terminating_count=0
+        if [ -n "$current_pods" ]; then
+            for pod in $current_pods; do
+                local pod_status
+                pod_status=$(kubectl get pod -n "$NAMESPACE" "$pod" -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+                if [ "$pod_status" = "Terminating" ] || [ "$pod_status" = "NotFound" ]; then
+                    ((terminating_count++))
+                fi
+            done
+        fi
+        
+        # If all pods are terminating or no pods exist, break
+        local initial_count
+        initial_count=$(echo "$initial_pods" | wc -w)
+        if [ "$terminating_count" -eq "$initial_count" ] || [ -z "$current_pods" ]; then
+            log_info "All pods are stopping, proceeding with cleanup"
+            break
+        fi
+        
+        sleep $SLEEP_INTERVAL
+        elapsed=$((elapsed + SLEEP_INTERVAL))
+    done
+    
+    if [ $elapsed -ge $TIMEOUT ]; then
+        log_warn "Timeout waiting for pods to stop, proceeding anyway"
+    fi
+    
+    return 0
+}
+
 # Restart deployment to generate new coverage metadata
 restart_deployment() {
     log_info "Restarting deployment $DEPLOYMENT to ensure fresh coverage metadata generation..."
     
+    # Initiate deployment restart
     if ! kubectl rollout restart deployment "$DEPLOYMENT" -n "$NAMESPACE"; then
         log_error "Failed to restart deployment $DEPLOYMENT"
         return 1
     fi
     
     log_info "Deployment restart initiated successfully"
+    
+    # Wait for pods to stop and generate covcounters files
+    wait_for_pods_to_stop
+    
+    # Clean up covcounters files after pods stop
+    cleanup_covcounters
+    
     return 0
 }
 
